@@ -1,7 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
     const h1 = document.getElementById('coords-display');
-    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.substring(1); // Remove the #
+    const params = new URLSearchParams(hash);
     const geoInput = params.get('q');
     const targetProvider = params.get('p');
 
@@ -30,14 +31,31 @@ document.addEventListener('DOMContentLoaded', () => {
         citymapper: {
             name: "Citymapper",
             url: (lat, lon) => `https://citymapper.com/directions?endcoord=${lat},${lon}`,
-            directions: true
+            directions: true,
+            directionsUrl: (userLat, userLon, lat, lon) => `https://citymapper.com/directions?startcoord=${userLat},${userLon}&endcoord=${lat},${lon}`
         },
         brouter: {
             name: "BRouter Web",
-            url: (lat, lon) => `https://map.denys.es/#map=15/${lat}/${lon}/cyclosm&lonlats=${lon},${lat}`,
-            directions: true
+            url: (lat, lon) => `https://map.denys.es/#map=15/${lat}/${lon}/cyclosm,route-quality&lonlats=${lon},${lat}`,
+            directions: true,
+            directionsUrl: (userLat, userLon, lat, lon) => `https://map.denys.es/#map=15/${lat}/${lon}/cyclosm,route-quality&lonlats=${userLon},${userLat};${lon},${lat}`
         }
     };
+
+    function handleGeolocationNavigation(key, lat, lon, fallbackUrl) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const userLat = position.coords.latitude;
+                const userLon = position.coords.longitude;
+                const provider = providers[key];
+                let url = provider.directionsUrl(userLat, userLon, lat, lon);
+                navigate(url);
+            },
+            () => {
+                navigate(fallbackUrl);
+            }
+        );
+    }
 
     function showLinks(lat, lon) {
         h1.textContent = `→ ${lat}, ${lon}`;
@@ -51,22 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (provider.directions) {
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const userLat = position.coords.latitude;
-                            const userLon = position.coords.longitude;
-                            let url;
-                            if (key === 'citymapper') {
-                                url = `https://citymapper.com/directions?startcoord=${userLat},${userLon}&endcoord=${lat},${lon}`;
-                            } else if (key === 'brouter') {
-                                url = `https://map.denys.es/#map=15/${lat}/${lon}/cyclosm&lonlats=${userLon},${userLat};${lon},${lat}`;
-                            }
-                            navigate(url);
-                        },
-                        () => {
-                            navigate(a.href);
-                        }
-                    );
+                    handleGeolocationNavigation(key, lat, lon, a.href);
                 });
             }
             output.appendChild(a);
@@ -78,22 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (providers[providerKey]) {
             const provider = providers[providerKey];
             if (provider.directions) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const userLat = position.coords.latitude;
-                        const userLon = position.coords.longitude;
-                        let url;
-                        if (providerKey === 'citymapper') {
-                            url = `https://citymapper.com/directions?startcoord=${userLat},${userLon}&endcoord=${lat},${lon}`;
-                        } else if (providerKey === 'brouter') {
-                            url = `https://map.denys.es/#map=15/${lat}/${lon}/cyclosm&lonlats=${userLon},${userLat};${lon},${lat}`;
-                        }
-                        navigate(url);
-                    },
-                    () => {
-                        navigate(provider.url(lat, lon));
-                    }
-                );
+                handleGeolocationNavigation(providerKey, lat, lon, provider.url(lat, lon));
             } else {
                 navigate(provider.url(lat, lon));
             }
@@ -104,12 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!geoInput) {
         output.innerHTML = `
-            <p>To use this tool, construct a URL with query parameters:</p>
+            <p>To use this tool, construct a URL with hash parameters:</p>
             <ul>
-                <li><code>?q=geo:40.7,-74.0</code></li>
-                <li><code>?p=gmaps&q=geo:40.7,-74.0</code></li>
-                <li><code>?p=osm&q=https%3A%2F%2Fmaps.google.com%2F%4040.7%2C-74.0%2C15z</code> (URL encoded source)</li>
-                <li><code>?q=om://o4B4pYZsRs</code> (encoded format)</li>
+                <li><code>#q=geo:40.7,-74.0</code></li>
+                <li><code>#p=gmaps&q=geo:40.7,-74.0</code></li>
+                <li><code>#p=osm&q=https%3A%2F%2Fmaps.google.com%2F%4040.7%2C-74.0%2C15z</code> (URL encoded source)</li>
+                <li><code>#q=om://o4B4pYZsRs</code> (encoded format)</li>
             </ul>
             <p>Use 'q' for the geo data and 'p' for the target provider (gmaps, osm, citymapper, brouter).</p>
         `;
